@@ -1,0 +1,37 @@
+name: Canvas Assignment Reminders
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  check-canvas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Run reminder check
+        env:
+          CANVAS_URL: ${{ secrets.CANVAS_URL }}
+          CANVAS_TOKEN: ${{ secrets.CANVAS_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          LOOKAHEAD_HOURS: "24"
+        run: python reminder.py
+
+      - name: Commit updated state
+        run: |
+          git config user.name "canvas-reminder-bot"
+          git config user.email "actions@github.com"
+          git add notified_state.json
+          git diff --quiet --cached || git commit -m "Update notified state [skip ci]"
+          git push

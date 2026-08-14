@@ -16,7 +16,11 @@ CANVAS_TOKEN = os.environ["CANVAS_TOKEN"]
 NTFY_TOPIC = os.environ["NTFY_TOPIC"]
 NTFY_SERVER = os.environ.get("NTFY_SERVER", "https://ntfy.sh").rstrip("/")
 FREQUENCY = float(os.environ.get("LOOKAHEAD_HOURS", "24"))
- 
+
+INTERVALS = [
+    (24, "24h"),
+    (1, "1h"),
+]
 STATE_FILE = os.path.join(os.path.dirname(__file__), "notified_state.json")
 
 HEADERS = {"Authorization": f"Bearer {CANVAS_TOKEN}"}
@@ -38,7 +42,6 @@ def canvas_get(path, params=None):
 
 def get_active_courses():
     courses = canvas_get("/courses", params={"enrollment_state": "active", "per_page": 100})
-    print(courses)
     return [c for c in courses if not c.get("access_restricted_by_date")]
 
 def get_upcoming_assignments(course_id, course_name):
@@ -74,9 +77,9 @@ def save_state(notified_ids):
     with open(STATE_FILE, "w") as f:
         json.dump(sorted(notified_ids), f)
 
-def send_ntfy(assignment, hours_left):
+def send_ntfy(assignment, hours_left, tier_label):
     due_local = datetime.fromisoformat(assignment["due_at"].replace("Z", "+00:00"))
-    title = f"Due in {hours_left:.0f}h: {assignment['course']}"
+    title = f"Due {tier_label}: {assignment['course']}"
     message = f"{assignment['name']}\nDue {due_local.strftime('%a %I:%M %p UTC')}"
  
     resp = requests.post(
@@ -113,26 +116,24 @@ def main():
             if due > window_end:
                 continue
             if due < now:
-                continue  # already past due, skip
-            state_key = f"{a['id']}"
-            if state_key in notified:
-                continue
- 
+                continue  
+
             hours_left = (due - now).total_seconds() / 3600
-            send_ntfy(a, hours_left)
-            newly_notified.add(state_key)
-            sent_count += 1
-            print(f"Notified: {a['course']} - {a['name']} (due in {hours_left:.1f}h)")
- 
+
+            for tier_hours, tier_label in INTERVALS:
+                if hours_left > tier_hours:
+                    continue
+                state_key = f"{a['id']}:{tier_label}"
+                if state_key in notified:
+                    continue
+
+                send_ntfy(a, hours_left, tier_label)
+                newly_notified.add(state_key)
+                sent_count += 1
+                print(f"Notified ({tier_label}): {a['course']} - {a['name']} (due in {hours_left:.2f}h)")
+                break  
     save_state(newly_notified)
     print(f"Done. {sent_count} notification(s) sent.")
  
 if __name__ == "__main__":
- #   main() 
-    test_assignment = {
-        "name": "Test Assignment",
-        "due_at": "2026-08-20T23:59:00Z",
-        "course": "Test Course",
-        "html_url": "https://canvas.gatech.edu",
-    }
-    send_ntfy(test_assignment, 5)
+     main() 
