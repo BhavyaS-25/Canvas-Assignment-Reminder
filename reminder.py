@@ -2,12 +2,14 @@ import os
 import sys
 import json
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
 import requests
 
 # Required variables in .env file
 # CANVAS_URL url of your canvas 
 # CANVAS_API_KEY Canvas API access token
 # NTFY_TOPIC ntfy topic for notifications
+load_dotenv()
 
 CANVAS_URL = os.environ["CANVAS_URL"].rstrip("/")
 CANVAS_TOKEN = os.environ["CANVAS_TOKEN"]
@@ -36,9 +38,10 @@ def canvas_get(path, params=None):
 
 def get_active_courses():
     courses = canvas_get("/courses", params={"enrollment_state": "active", "per_page": 100})
+    print(courses)
     return [c for c in courses if not c.get("access_restricted_by_date")]
 
-def get_upcoming_assigments(course_id, course_name):
+def get_upcoming_assignments(course_id, course_name):
     assignments = canvas_get(
         f"/courses/{course_id}/assignments",
         params={"bucket": "upcoming", "per_page": 100, "order_by": "due_at"},
@@ -100,7 +103,7 @@ def main():
     for course in courses:
         course_name = course.get("name") or course.get("course_code") or "Course"
         try:
-            assignments = get_upcoming_assigments(course["id"], course_name)
+            assignments = get_upcoming_assignments(course["id"], course_name)
         except requests.HTTPError as e:
             print(f"Warning: failed to fetch assignments for {course_name}: {e}", file=sys.stderr)
             continue
@@ -125,4 +128,11 @@ def main():
     print(f"Done. {sent_count} notification(s) sent.")
  
 if __name__ == "__main__":
-    main()
+ #   main() 
+    test_assignment = {
+        "name": "Test Assignment",
+        "due_at": "2026-08-20T23:59:00Z",
+        "course": "Test Course",
+        "html_url": "https://canvas.gatech.edu",
+    }
+    send_ntfy(test_assignment, 5)
